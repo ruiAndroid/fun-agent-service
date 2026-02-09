@@ -1,17 +1,22 @@
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 
 def _default_config_path() -> str:
+    # agents/skills/llm.py -> agents/configs/llm.json
+    import os
+
     here = os.path.dirname(__file__)
     return os.path.normpath(os.path.join(here, "..", "configs", "llm.json"))
 
 
 def _load_file_config() -> Dict[str, Any]:
-    path = os.getenv("LLM_CONFIG_PATH") or _default_config_path()
+    # Only read config from file (do not depend on environment variables).
+    import os
+
+    path = _default_config_path()
     if not os.path.exists(path):
         return {}
     try:
@@ -33,10 +38,10 @@ class LLMClient:
     ):
         cfg = _load_file_config()
         self.base_url = (
-            (base_url or cfg.get("base_url") or os.getenv("LLM_BASE_URL") or "http://localhost:8000")
+            (base_url or cfg.get("base_url") or "http://localhost:8000")
         ).rstrip("/")
-        self.api_key = api_key or cfg.get("api_key") or os.getenv("LLM_API_KEY")
-        self.model = model or cfg.get("model") or os.getenv("LLM_MODEL") or "gpt-4o-mini"
+        self.api_key = api_key or cfg.get("api_key")
+        self.model = model or cfg.get("model") or "gpt-4o-mini"
         self.timeout = int(cfg.get("timeout") or timeout)
 
     def chat(
@@ -47,7 +52,7 @@ class LLMClient:
         extra: Optional[Dict[str, Any]] = None,
     ) -> str:
         if not self.api_key:
-            raise ValueError("LLM_API_KEY not set")
+            raise ValueError("LLM api_key not set (check agents/configs/llm.json)")
 
         payload: Dict[str, Any] = {
             "model": self.model,

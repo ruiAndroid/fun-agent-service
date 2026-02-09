@@ -7,10 +7,63 @@ const path = require("path");
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
-const PORT = Number(process.env.PORT || 4010);
-const PYTHON_BIN = process.env.PYTHON_BIN || "python";
-const LLM_CONFIG_PATH =
-  process.env.LLM_CONFIG_PATH || path.join(__dirname, "agents", "configs", "llm.json");
+function parseEnvFile(content) {
+  const out = {};
+  const lines = String(content || "").split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const idx = line.indexOf("=");
+    if (idx < 0) continue;
+    const key = line.slice(0, idx).trim();
+    if (!key) continue;
+    let val = line.slice(idx + 1).trim();
+    // strip surrounding quotes
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    out[key] = val;
+  }
+  return out;
+}
+
+function loadConfigFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return {};
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return parseEnvFile(raw);
+  } catch {
+    return {};
+  }
+}
+
+// Prefer config file to avoid relying on system environment variables.
+// Optional: allow overriding config path via CLI: `node server.js --config /path/to/file.env`
+function getConfigPathFromArgv() {
+  const idx = process.argv.indexOf("--config");
+  if (idx >= 0) {
+    const next = process.argv[idx + 1];
+    if (next && !next.startsWith("-")) return next;
+  }
+  return null;
+}
+
+const CONFIG_PATH = getConfigPathFromArgv() || path.join(__dirname, "config", "fun-agent-service.env");
+const FILE_CFG = loadConfigFile(CONFIG_PATH);
+
+function cfg(key, fallback) {
+  if (FILE_CFG[key] != null && String(FILE_CFG[key]).trim() !== "") return FILE_CFG[key];
+  return fallback;
+}
+
+const PORT = Number(cfg("PORT", 4010));
+const PYTHON_BIN = cfg("PYTHON_BIN", "python");
+const LLM_CONFIG_PATH = path.isAbsolute(cfg("LLM_CONFIG_PATH", ""))
+  ? cfg("LLM_CONFIG_PATH", "")
+  : path.resolve(__dirname, cfg("LLM_CONFIG_PATH", path.join("agents", "configs", "llm.json")));
 
 app.use((req, res, next) => {
   const incoming = req.headers["x-trace-id"];
@@ -28,6 +81,8 @@ function runPython(args, input) {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
+        // allow python side to locate llm config (also works if omitted because llm.py has a default)
+        LLM_CONFIG_PATH,
         PYTHONIOENCODING: "utf-8",
         PYTHONUTF8: "1",
       },
