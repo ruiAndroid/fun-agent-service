@@ -74,7 +74,6 @@ class AdminAgent(BaseAgent):
         return {"intent": intent, "slots": slots, "reply": reply}
 
     def run(self, payload: AgentInput) -> str:
-        trace = f"[trace={payload.trace_id}] " if payload.trace_id else ""
         client = registry.llm()
         if self.model:
             client.model = self.model
@@ -86,12 +85,12 @@ class AdminAgent(BaseAgent):
             response = client.chat(messages)
             try:
                 data = json.loads(response)
-                return f"{trace}{data.get('reply', '')}"
+                return f"{data.get('reply', '')}"
             except Exception:
-                return f"{trace}{response}"
+                return f"{response}"
         except Exception as exc:
             data = self._simple_parse(payload.text)
-            return f"{trace}LLM 调用失败：{exc}。{data['reply']}"
+            return f"LLM 调用失败：{exc}。{data['reply']}"
 
 
 AGENT = AdminAgent()

@@ -57,7 +57,6 @@ class AttendanceAgent(BaseAgent):
         }
 
     def run(self, payload: AgentInput) -> str:
-        trace = f"[trace={payload.trace_id}] " if payload.trace_id else ""
         client = registry.llm()
         if self.model:
             client.model = self.model
